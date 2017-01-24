@@ -1,0 +1,475 @@
+---
+title: "Design tRNA probes (zebrafish)"
+author: "Yamila Torres Cleuren & Gunnar Schulze"
+date: "November 3, 2016"
+output: html_document
+---
+
+Optimal number of clusters are selected automatically, unless a maximum number of clusters is given as an input.  
+
+First, load up libraries and function needs to be ran in R.
+
+```{r,message=FALSE,echo=FALSE}
+library("seqinr")
+library("Biostrings")
+library("msa")
+library("ape")
+library("DECIPHER")
+library("htmltools")
+setwd("~/Bergen/tRNAs/R")
+setwd("~/Bergen/tRNAs/R")
+###Function to run
+
+clusterSequencesKmeans = function(seqs, tryClusterRange = 20, maxEdits = 8, threshold=0.5, max.Clusters=NULL){
+  
+  require(Biostrings)
+  require(DECIPHER)
+ 
+   # define recursive function
+  clusterSeqsRecursive = function(seqs,tryClusterRange,maxEdits){
+    if(length(seqs)==0){return(NULL)}
+    if(length(seqs)==1){return(seqs)}
+  
+    # alternative option: use kmeans and increase the nstart parameter 
+    DNA_dist<- as.matrix(stringDist(seqs))
+    #DNA_hclust<- hclust(DNA_dist)
+    
+    if(!is.null(max.Clusters)) {
+      # force max numbers of clusters
+      message(paste("forcing number of clusters to be:",max.Clusters))
+      #warning("ignoring parameters threshold and maxEdits")
+      DNA_km<- kmeans(DNA_dist,centers=max.Clusters,nstart=50)
+      clIds<- DNA_km$cluster
+      clNam<- names(clIds)
+      clusters<-list()
+      for (cl in unique(clIds)) {
+        clusters[[cl]]<- seqs[clNam[clIds==cl]]
+      }
+    } else {
+      # recursive clustering
+      res<- c()
+      kmClusters<- list()
+      krange<- min(tryClusterRange,length(seqs)-1)
+      print(length(seqs))
+      #print(krange)
+      for(k in 1:krange){
+        km<- kmeans(DNA_dist,centers=k,nstart=50)
+        kmClusters[[k]]<- km
+        res<- c(res, km$betweenss/km$totss)
+      }
+    
+      # get optimal cluster size
+      if(length(res)==1){
+        return(seqs)
+      } else {
+        message("find optimal number of clusters...")
+        for(i in seq(2,length(res), 1)){ if((res[i]-res[i-1])/res[i-1] <= 0.1){break} }
+      }
+      
+      print(i)
+      clIds<- kmClusters[[i]]$cluster
+      print(table(clIds))
+      clNam<- names(clIds)
+      
+      # make a consensus list
+      consensusList<- list()
+      for(cl in clIds){
+        clIdsX<- clNam[clIds==cl]
+        seqsX<- seqs[clIdsX]
+        consensusList[[cl]]<- consensusString(seqsX, ambiguityMap="N",threshold=threshold)
+      }
+      
+      # recursion
+      clusters<-list()
+      for (cl in unique(clIds)) {
+        # if the distances are > maxEdits, call 
+        input<- c(seqs[clIds==cl],DNAStringSet(consensusList[[cl]]))
+        res<- as.matrix(stringDist(input))
+        distances<- res[nrow(res),-ncol(res)]
+        inputNames<- names(input)[-ncol(res)]
+        
+        tooManyMismatches<- inputNames[distances > maxEdits]
+        # call the function again on a subset (recursion)
+        if(length(tooManyMismatches)>0){
+          message("recluster...")
+          clusters[[cl]]<- clusterSeqsRecursive(seqs[clNam[clIds==cl]],tryClusterRange,maxEdits)   
+        }else {
+          clusters[[cl]]<- seqs[clNam[clIds==cl]]
+        }
+      }
+    }
+    
+    return(clusters)
+  }
+  
+  # run
+  res<-clusterSeqsRecursive(seqs=seqs,tryClusterRange = tryClusterRange,maxEdits = maxEdits)
+  res<- unlist(res,recursive = TRUE)
+  res<- res[order(sapply(res,length),decreasing=TRUE)]
+  #message(paste("found",length(res),"clusters"))
+  message(paste("cluster sizes: "),paste(sapply(res,length),collapse=","))
+  return(res)
+}
+summarize_output <- function(res){
+  consensusList<- list()
+  for(i in 1:n){
+    consensusList[[i]] <- consensusString(consensusMatrix(res[[i]]),ambiguityMap="N")
+  }
+  tooManyMismatches <- list()
+  for(i in 1:n){
+    cons<- DNAStringSet(consensusList[[i]])
+    input<- c(res[[i]],cons)
+    res2<-as.matrix(stringDist(input))
+    distances<-res2[nrow(res2),]
+    print(consensusList[[i]])
+    print(table(distances))
+    tooManyMismatches[[i]] <- names(input)[distances > 8] #contains list with outliers
+  }
+  
+  #total number of mismatches
+  tooManymismatches2 <- list()
+  tooManyMismatches<- list()
+  for(i in 1:n){
+    cons<- DNAStringSet(consensusList[[i]])
+    for(j in 1:n){
+      input<- c(res[[j]],cons)
+      res2<-as.matrix(stringDist(input))
+      distances<-res2[nrow(res2),]
+      #print(consensusList[[i]])
+      #print(table(distances))
+      tooManyMismatches[[j]] <- names(input)[distances > 8] #contains list with outliers
+    }
+    tooManymismatches2[[i]] <- tooManyMismatches
+  }
+  
+  lapply(tooManymismatches2[[1]],length) #mismatches to each consensus seq per cluster
+  sum_mismatch <- list()
+  
+  for(i in 1:n){
+    sum_mismatch[[i]] <- lapply(tooManymismatches2[[i]],length)
+  }
+  mismatch_mat <- matrix(unlist(sum_mismatch), ncol = n, byrow = TRUE)
+  mismatch_min <- c()
+  for(i in 1:n){
+    mismatch_min[i]<- min(mismatch_mat[,i])
+  }
+  total_mismatches <- sum(mismatch_min)
+  message(paste("Total number of sequences not matching:",total_mismatches))
+  message("Total number of sequences analyzed: ",length(seqs))
+  message("Percentage mapped: ", (length(seqs)-total_mismatches)/length(seqs))
+  consensusList<<-consensusList
+}
+```
+
+Then, we can fetch the sequences for the tRNA being studied, divide them per cluster and calculate the consensus sequence for each tRNA. 
+# Ala tRNA
+```{r}
+seqs <- readDNAStringSet('Ala_nospaces.txt')
+```
+
+Run the function with the sequences.
+```{r,message=FALSE}
+#res <-clusterSequencesKmeans(seqs)
+```
+
+Change the maximum number of clusters (n) to desired number:
+```{r}
+n = 3
+res <-clusterSequencesKmeans(seqs,max.Clusters=n)
+```
+Check results for desired number of clusters:
+```{r,echo=FALSE}
+summarize_output(res)
+```
+
+Check consensus sequences & write fasta files per cluster
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[1]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[1]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Ala_1.html")
+write.fasta(res[[1]], name=names(res[[1]]),file="Ala_1.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Ala_1.html")
+```
+
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[2]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[2]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Ala_2.html")
+write.fasta(res[[2]],name=names(res[[2]]), file="Ala_2.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Ala_2.html")
+```
+
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[3]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[3]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Ala_3.html")
+write.fasta(res[[3]], name=names(res[[3]]), file="Ala_3.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Ala_3.html")
+```
+
+# Gln tRNA
+```{r}
+seqs <- readDNAStringSet('Gln_nospaces.txt')
+```
+
+Run the function with the sequences.
+```{r,message=FALSE}
+#res <-clusterSequencesKmeans(seqs)
+```
+
+Change the maximum number of clusters (n) to desired number:
+```{r}
+n = 3
+res <-clusterSequencesKmeans(seqs,max.Clusters=n)
+```
+Check results for desired number of clusters:
+```{r,echo=FALSE}
+summarize_output(res)
+```
+
+Check consensus sequences & write fasta files per cluster
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[1]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[1]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Gln_1.html")
+write.fasta(res[[1]], name=names(res[[1]]),file="Gln_1.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Gln_1.html")
+```
+
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[2]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[2]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Gln_2.html")
+write.fasta(res[[2]],name=names(res[[2]]), file="Gln_2.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Gln_2.html")
+```
+
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[3]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[3]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Gln_3.html")
+write.fasta(res[[3]], name=names(res[[3]]), file="Gln_3.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Gln_3.html")
+```
+
+
+#For Phe tRNA:
+```{R}
+seqs <- readDNAStringSet('Phe_nointron_nospace.txt')
+```
+```{r,message=FALSE}
+n = 3
+res <-clusterSequencesKmeans(seqs,max.Clusters=n)
+```
+Check results for desired number of clusters:
+```{r,echo=FALSE}
+summarize_output(res)
+```
+Check consensus seqs in browser:
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[1]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[1]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Phe_1.html")
+write.fasta(res[[1]], name=names(res[[1]]),file="Phe_1.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Phe_1.html")
+```
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[2]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[2]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Phe_2.html")
+write.fasta(res[[2]], name=names(res[[2]]),file="Phe_2.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Phe_2.html")
+```
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[3]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[3]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Phe_3.html")
+write.fasta(res[[3]], name=names(res[[3]]),file="Phe_3.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Phe_3.html")
+```
+
+#Arg tRNA:
+
+```{r}
+seqs <- readDNAStringSet('Arg_nointrons_nospaces.txt')
+```
+
+Change the maximum number of clusters (n) to desired number:
+```{r,message=FALSE}
+n = 3
+res <-clusterSequencesKmeans(seqs,max.Clusters=n)
+```
+Check results for desired number of clusters:
+```{r,echo=FALSE}
+summarize_output(res)
+```
+Check consensus sequences
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[1]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[1]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Arg_1.html")
+write.fasta(res[[1]], name=names(res[[1]]),file="Arg_1.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Arg_1.html")
+```
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[2]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[2]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Arg_2.html")
+write.fasta(res[[2]], name=names(res[[2]]),file="Arg_2.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Arg_2.html")
+```
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[3]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[3]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Arg_3.html")
+write.fasta(res[[3]], name=names(res[[3]]),file="Arg_3.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Arg_3.html")
+```
+
+##Arg with 4 clusters
+```{r,message=FALSE}
+n = 4
+res <-clusterSequencesKmeans(seqs,max.Clusters=n)
+```
+Check results for desired number of clusters:
+```{r,echo=FALSE}
+summarize_output(res)
+```
+Check consensus sequences
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[1]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[1]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Arg_1.html")
+write.fasta(res[[1]], name=names(res[[1]]),file="Arg_1.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Arg_1.html")
+```
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[2]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[2]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Arg_2.html")
+write.fasta(res[[2]], name=names(res[[2]]),file="Arg_2.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Arg_2.html")
+```
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[3]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[3]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Arg_3.html")
+write.fasta(res[[3]], name=names(res[[3]]),file="Arg_3.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Arg_3.html")
+```
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[4]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[4]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Arg_4.html")
+write.fasta(res[[4]], name=names(res[[4]]),file="Arg_4.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Arg_4.html")
+```
+
+#Asp tRNA
+```{r,message=FALSE}
+seqs <- readDNAStringSet('Asp_nointrons_nospaces.txt')
+n = 3
+res <-clusterSequencesKmeans(seqs,max.Clusters=n)
+```
+Check results for desired number of clusters:
+```{r,echo=FALSE}
+summarize_output(res)
+```
+Check consensus sequences
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[1]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[1]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Asp_1.html")
+write.fasta(res[[1]], name=names(res[[1]]),file="Asp_1.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Asp_1.html")
+```
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[2]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[2]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Asp_2.html")
+write.fasta(res[[2]], name=names(res[[2]]),file="Asp_2.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Asp_2.html")
+```
+```{r,results="hide"}
+cons <- DNAStringSet(consensusList[[3]])
+names(cons)<- c("True consensus")
+DNA <- AlignSeqs(c(DNAStringSet(res[[3]],use.names=FALSE),cons))
+BrowseSeqs(DNA, highlight=0,htmlFile = "Asp_3.html")
+write.fasta(res[[3]], name=names(res[[3]]),file="Asp_3.fasta")
+```
+
+```{R,echo=FALSE}
+includeHTML("Asp_3.html")
+```
