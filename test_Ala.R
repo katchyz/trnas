@@ -1,16 +1,20 @@
-### melting temperature
-# system('dssp.exe -i xxx -o xxx.out)
-library(DECIPHER)
+##
 library(Biostrings)
 
-##
-seqs <- readDNAStringSet('/Users/kasia/Documents/PhD/scripts/tRNAs/trna_split/Asn_ATT.txt')
+tRNAdir <- './trna_split'
+
+seqs <- readDNAStringSet('./trna_split/Ala_AGC.txt')
+
+# library(seqinr)
+# read.fasta()
+
 n = 4
-#res_Asn_ATT <-clusterSequencesKmeans(seqs,max.Clusters=n)
 res <- clusterSequencesKmeans(seqs,max.Clusters=n)
 output_Asn_ATT <- summarize_output(res) #not matching 2/15
 
-seqs <- readDNAStringSet('/Users/kasia/Documents/PhD/scripts/tRNAs/trna_split/Asn_GTT.txt')
+tRNA <- "Asn"
+anticodon <- "GTT"
+seqs <- readDNAStringSet(paste(tRNA,"_",anticodon,".txt",sep=""))
 n=2
 #res_Asn_GTT <-clusterSequencesKmeans(seqs,max.Clusters=n)
 res <- clusterSequencesKmeans(seqs,max.Clusters=n)
@@ -204,6 +208,9 @@ for(i in 1:n){
 ###Functions to run
 clusterSequencesKmeans = function(seqs, tryClusterRange = 20, maxEdits = 8, threshold=0.5, max.Clusters=NULL){
   
+  require(Biostrings)
+  require(DECIPHER)
+  
   # define recursive function
   clusterSeqsRecursive = function(seqs,tryClusterRange,maxEdits){
     
@@ -211,28 +218,9 @@ clusterSequencesKmeans = function(seqs, tryClusterRange = 20, maxEdits = 8, thre
     if(length(seqs)==0){return(NULL)}
     if(length(seqs)==1){return(seqs)}
     
-    ## align locally each sequence to each
-    # initialize distance matrix
-    DNA_dist <- matrix(nrow = length(seqs), ncol = length(seqs))
-    rownames(DNA_dist) <- names(seqs)
-    colnames(DNA_dist) <- names(seqs)
-    for (i in 1:length(seqs)) {
-      for (j in 1:length(seqs)) {
-        seq <- as.character(as.character(seqs[i]))
-        seq2 <- as.character(as.character(seqs[j]))
-        pa <- pairwiseAlignment(seq, seq2, type = "local")
-        sd <- as.integer(stringDist(c(as.character(pattern(pa)), as.character(subject(pa)))))
-        # if length of the alignment is very short, use stringDist without aligning
-        if (width(pattern(pa)) > 65) {
-          DNA_dist[i, j] <- sd
-          DNA_dist[j, i] <- sd
-        } else {
-          unalignedSd <- as.integer(stringDist(c(seq, seq2)))
-          DNA_dist[i, j] <- unalignedSd
-          DNA_dist[j, i] <- unalignedSd
-        }
-      }
-    }
+    # alternative option: use kmeans and increase the nstart parameter 
+    DNA_dist<- as.matrix(stringDist(seqs))
+    #DNA_hclust<- hclust(DNA_dist)
     
     if(!is.null(max.Clusters)) {
       # force max numbers of clusters
@@ -275,7 +263,7 @@ clusterSequencesKmeans = function(seqs, tryClusterRange = 20, maxEdits = 8, thre
       consensusList<- list()
       for(cl in clIds){
         clIdsX<- clNam[clIds==cl]
-        seqsX<- seqs[clIdsX] ### ?????? should it be on pairwise aligned ??????????
+        seqsX<- seqs[clIdsX]
         consensusList[[cl]]<- consensusString(seqsX, ambiguityMap="N",threshold=threshold)
       }
       
@@ -315,8 +303,7 @@ summarize_output <- function(res){
   consensusList<- list()
   for(i in 1:n){
     #consensusList[[i]] <- consensusString(consensusMatrix(res[[i]]),ambiguityMap="N")
-    consensusList[[i]]<- ConsensusSequence(res[[i]],threshold=0.5) ### ?????? should it be on pairwise aligned?
-    ### !!!!!!!!!! fix ambiguity mapping
+    consensusList[[i]]<- ConsensusSequence(res[[i]],threshold=0.5)
   }
   tooManyMismatches <- list()
   for(i in 1:n){

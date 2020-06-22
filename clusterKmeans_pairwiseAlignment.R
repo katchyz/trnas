@@ -1,8 +1,8 @@
 library(DECIPHER)
 library(Biostrings)
 
-path <- "/Users/kasia/Documents/PhD/scripts/tRNAs/trna_split/20aa"
-path <- "/export/valenfs/projects/Zoya/tRNA_microarray/tRNA/split/20aa"
+path <- "./trna_split/20aa"
+#path <- "/export/valenfs/projects/Zoya/tRNA_microarray/tRNA/split/20aa"
 files <- list.files(path=path, pattern="*.txt", full.names=T, recursive=FALSE)
 
 l <- lapply(files, function(x) {
@@ -22,8 +22,8 @@ for (file in files) {
   outputs[[aa]] <- summarize_output(res)
 }
 
-save(ress, file = "/Users/kasia/Documents/PhD/scripts/tRNAs/trna_split/20aa/ress.Rsave")
-save(outputs, file = "/Users/kasia/Documents/PhD/scripts/tRNAs/trna_split/20aa/outputs.Rsave")
+save(ress, file = "./trna_split/20aa/ress.Rsave")
+save(outputs, file = "./trna_split/20aa/outputs.Rsave")
 
 ###Functions to run
 clusterSequencesKmeans = function(seqs, tryClusterRange = 20, maxEdits = 8, threshold=0.5, max.Clusters=NULL){

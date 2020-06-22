@@ -1,5 +1,5 @@
 
-
+# pick one tRNA
 seqs <- readDNAStringSet('Gln_nospaces.txt')
 
 seqs <- readDNAStringSet('Ala_nospaces.txt')

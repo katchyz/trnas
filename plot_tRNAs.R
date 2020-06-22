@@ -27,8 +27,8 @@ p <- ggplot(data.m, aes(variable, people)) +
 p + scale_fill_gradient(low = "white", high = "steelblue")
 
 ##############
-distances <- read.csv("/Users/kasia/Documents/PhD/scripts/tRNAs/trna_split/20aa/distances.csv")
-LAwidth <- read.csv("/Users/kasia/Documents/PhD/scripts/tRNAs/trna_split/20aa/LAwidth.csv")
+distances <- read.csv("./trna_split/20aa/distances.csv")
+LAwidth <- read.csv("./trna_split/20aa/LAwidth.csv")
 
 distances.m <- melt(distances)
 #ggplot(distances.m, aes(variable, X)) + geom_tile(aes(fill = value), colour = "white") + scale_fill_gradient(low = "white", high = "steelblue")
@@ -46,11 +46,11 @@ glyd$X <- colnames(glyd)
 glyd.m <- melt(glyd)
 
 ggplot(glyd.m, aes(variable, X)) + geom_tile(aes(fill = value), colour = "white") + scale_fill_gradient2(low = "red", mid = "white", high = "blue", midpoint = 8, breaks = c(1,8,80)) + theme(axis.title.x=element_blank(), axis.title.y=element_blank(), axis.text.x = element_text(angle = 90, hjust = 1)) + ggtitle("distances, Gly")
-ggsave(file = "/Users/kasia/Documents/PhD/scripts/tRNAs/plots/gly_distances.png")
+ggsave(file = "./plots/gly_distances.png")
 
 glyw <- LAwidth[40:47,41:48]
 glyw$X <- colnames(glyw)
 glyw.m <- melt(glyw)
 
 ggplot(glyw.m, aes(variable, X)) + geom_tile(aes(fill = value), colour = "white") + scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 15, breaks = c(1,15,80)) + theme(axis.title.x=element_blank(), axis.title.y=element_blank(), axis.text.x = element_text(angle = 90, hjust = 1)) + ggtitle("local alignment width, Gly")
-ggsave(file = "/Users/kasia/Documents/PhD/scripts/tRNAs/plots/gly_LAwidth.png")
+ggsave(file = "./plots/gly_LAwidth.png")
